@@ -54,14 +54,18 @@ def int_or_float(num: int | float | str) -> int | float | None:
 
 #Create Class QuantNorm 
 class QuantNorm():
-    def __init__(self, number, unit,currency_update={}):
+    def __init__(self, number, unit,currency_update):
         number = int_or_float(number)
         if number is not None:
             self.og_number = number
             self.og_unit = unit
         if currency_update:
-            for currency,value in currency_update.items():
-                Normalization_dict[currency] = value
+            for currency, value in currency_update.items():
+                # Convert to tuple (factor, 'USD') if only factor is provided
+                if isinstance(value, (int, float)):
+                    Normalization_dict[currency] = (value, "USD")
+                else:
+                    Normalization_dict[currency] = value
 
     def __str__(self):
         return self.normalize_quant_s()
@@ -75,7 +79,7 @@ class QuantNorm():
     
     #If the input unit is plural then convert it to singular form
     def singular(self, unit):
-        unit = unit.lower()
+        unit = unit.lower().strip()
         #if the unit is currency then no conversion is needed
         if unit.upper() in Currency_dict:
             return unit.upper()
@@ -85,17 +89,12 @@ class QuantNorm():
                 if unit == plural:
                     return singular
         # If unit ends with 'es', then strip the 'es' and check if it's in the dictionary
-        elif unit.endswith('es'):
-            singlular_unit = unit[:-2]
-            if singlular_unit in Normalization_dict:
-                return singlular_unit
-        
+        if unit.endswith('es') and unit[:-2] in Normalization_dict:
+            return unit[:-2]
         #if unit ends with just 's', then strip the 's' and return if it's in the dictionary
-        elif unit.endswith('s'):
-            singlular_unit = unit[:-1]
-            if singlular_unit in Normalization_dict:
-                return singlular_unit
-            
+        elif unit.endswith('s') and unit[:-1] in Normalization_dict:
+            return unit[:-1]
+        
         else:
             return unit
 
@@ -108,19 +107,20 @@ class QuantNorm():
         
         #Check if the unit has an irregular spelling, if so then return the plural version
         if unit in Irregular_dict:
-            for singular,plural in Irregular_dict.items():
-                if unit == singular:
-                    return plural
+            return Irregular_dict[unit]
+        
+        if unit in Normalization_dict:
+            if not unit.endswith("s"):
+                return unit + "s"
+            else:
+                return unit
         
         #If the unit ends in [sh, ch, s, x] then add 'es; to the end to make it plural
-        elif unit[-2:] in ['sh','ch'] or unit[-1] in ['s','x']:
-            plural = unit + 'es'
-            return plural
+        if unit[-2:] in ['sh','ch'] or unit[-1] in ['s','x']:
+            return unit + 'es'
         
-        #If none of the above then add 's' to create the plural
-        else:
-            plural = unit + 's'
-            return plural
+        return unit + "s"
+        
 
     def normalize_quant(self):
         singular_unit = self.singular(self.og_unit)
@@ -134,19 +134,18 @@ class QuantNorm():
             return (self.og_number,singular_unit)
     
     def normalize_quant_s(self):
-        converted_value, unit_singular = self.normalize_quant()
+        converted_value, unit = self.normalize_quant()
 
-        #If the unit does not = 1, then use the plural form of the unit
+        if unit in Currency_dict:
+            symbol = Abbrev_dict.get(unit,unit)
+            return f"{symbol}{converted_value}"
+        
         if converted_value != 1:
-            unit_output = self.plural(unit_singular)
-
-            #Return the currency symbol followed by the number value
-            if unit_singular in Currency_dict:
-                return f'{Abbrev_dict[unit_singular]} {converted_value}'
-            
-            return f'{converted_value} {unit_output}'
+            unit_output = self.plural(unit)
         else:
-            return f'{converted_value} {unit_singular}'
+            unit_output = unit
+        
+        return f"{converted_value} {unit_output}"
 
 #Only run this if this file is run directly and not imported
 if __name__ == "__main__":
